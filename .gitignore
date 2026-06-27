@@ -1,0 +1,11 @@
+.venv/
+data/
+checkpoints/
+*.tif
+*.pt
+*.pth
+__pycache__/
+.ipynb_checkpoints/
+*.egg-info/
+.env
+mlruns/
