@@ -1,109 +1,96 @@
 import torch
 import torch.nn as nn
+import torchvision.models as models
 
 
-class ConvBlock(nn.Module):
-    """Double convolution 3×3 → BN → ReLU, bloc de base du U-Net."""
+class DecoderBlock(nn.Module):
+    """
+    Upsampling bilinéaire + ConvBlock.
+    Reçoit les features du niveau précédent et la différence de skip connections.
+    """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, skip_channels, out_channels):
         super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+        self.up = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+        )
+        self.conv = nn.Sequential(
+            nn.Conv2d(out_channels + skip_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
+            nn.Dropout2d(0.2),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
 
-    def forward(self, x):
-        return self.block(x)
-
-
-class EncoderBlock(nn.Module):
-    """ConvBlock + MaxPool — descend d'un niveau dans l'encodeur."""
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv = ConvBlock(in_channels, out_channels)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-
-    def forward(self, x):
-        features = self.conv(x)   # features avant pooling → skip connection
-        pooled   = self.pool(features)
-        return features, pooled
-
-
-class DecoderBlock(nn.Module):
-    """
-    Upsampling + ConvBlock.
-
-    Reçoit la différence de features Siamese (skip) et les features
-    du niveau précédent du décodeur, les concatène, puis applique ConvBlock.
-    """
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.up   = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
-        self.conv = ConvBlock(out_channels * 2, out_channels)
-
     def forward(self, x, skip):
         x = self.up(x)
-        x = torch.cat([x, skip], dim=1)  # concatène avec la skip connection
+        x = torch.cat([x, skip], dim=1)
         return self.conv(x)
 
 
 class SiameseUNet(nn.Module):
     """
-    FC-Siam-diff : Siamese U-Net avec différence de features.
+    Siamese U-Net avec encodeur ResNet34 pré-entraîné ImageNet.
 
-    L'encodeur est partagé entre T1 et T2 (mêmes poids).
-    Les skip connections transmettent la différence |features_T1 - features_T2|
-    au décodeur plutôt que les features brutes — c'est ce qui rend
-    l'architecture sensible au changement à chaque échelle spatiale.
+    L'encodeur ResNet34 est partagé entre T1 et T2 (mêmes poids).
+    Les skip connections transmettent la différence absolue de features
+    à chaque niveau, sensibilité au changement à toutes les échelles spatiales.
+    Le Dropout2d dans le décodeur régularise contre le surapprentissage.
     """
 
-    def __init__(self, in_channels=3, base_filters=32):
+    def __init__(self, in_channels=3, pretrained=True):
         super().__init__()
 
-        # Encodeur partagé — 4 niveaux
-        self.enc1 = EncoderBlock(in_channels,      base_filters)       # 256 → 128
-        self.enc2 = EncoderBlock(base_filters,     base_filters * 2)   # 128 → 64
-        self.enc3 = EncoderBlock(base_filters * 2, base_filters * 4)   # 64  → 32
-        self.enc4 = EncoderBlock(base_filters * 4, base_filters * 8)   # 32  → 16
+        # Encodeur ResNet34 pré-entraîné
+        backbone = models.resnet34(
+            weights=models.ResNet34_Weights.IMAGENET1K_V1 if pretrained else None
+        )
 
-        # Bottleneck
-        self.bottleneck = ConvBlock(base_filters * 8, base_filters * 16)
+        # On extrait les blocs de l'encodeur pour accéder aux skip connections
+        self.enc0 = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu)  # 64ch, /2
+        self.pool = backbone.maxpool                                              # /4
+        self.enc1 = backbone.layer1   # 64ch,  /4
+        self.enc2 = backbone.layer2   # 128ch, /8
+        self.enc3 = backbone.layer3   # 256ch, /16
+        self.enc4 = backbone.layer4   # 512ch, /32
 
-        # Décodeur — reçoit les différences de features en skip
-        self.dec4 = DecoderBlock(base_filters * 16, base_filters * 8)
-        self.dec3 = DecoderBlock(base_filters * 8,  base_filters * 4)
-        self.dec2 = DecoderBlock(base_filters * 4,  base_filters * 2)
-        self.dec1 = DecoderBlock(base_filters * 2,  base_filters)
+        # Décodeur — channels calés sur les sorties ResNet34
+        self.dec4 = DecoderBlock(512, 256, 256)
+        self.dec3 = DecoderBlock(256, 128, 128)
+        self.dec2 = DecoderBlock(128,  64,  64)
+        self.dec1 = DecoderBlock( 64,  64,  32)
+
+        # Remonte à la résolution originale (×2 final)
+        self.up_final = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
         # Tête de classification binaire
-        self.head = nn.Conv2d(base_filters, 1, kernel_size=1)
+        self.head = nn.Conv2d(32, 1, kernel_size=1)
 
     def encode(self, x):
-        """Passe une image dans l'encodeur, retourne features + sortie poolée."""
-        s1, x = self.enc1(x)
-        s2, x = self.enc2(x)
-        s3, x = self.enc3(x)
-        s4, x = self.enc4(x)
-        return (s1, s2, s3, s4), x
+        s0 = self.enc0(x)       # (B, 64,  H/2,  W/2)
+        x  = self.pool(s0)      # (B, 64,  H/4,  W/4)
+        s1 = self.enc1(x)       # (B, 64,  H/4,  W/4)
+        s2 = self.enc2(s1)      # (B, 128, H/8,  W/8)
+        s3 = self.enc3(s2)      # (B, 256, H/16, W/16)
+        s4 = self.enc4(s3)      # (B, 512, H/32, W/32)
+        return s0, s1, s2, s3, s4
 
     def forward(self, t1, t2):
-        # Encodage de T1 et T2 avec les mêmes poids
-        (s1_t1, s2_t1, s3_t1, s4_t1), x_t1 = self.encode(t1)
-        (s1_t2, s2_t2, s3_t2, s4_t2), x_t2 = self.encode(t2)
+        s0_t1, s1_t1, s2_t1, s3_t1, s4_t1 = self.encode(t1)
+        s0_t2, s1_t2, s2_t2, s3_t2, s4_t2 = self.encode(t2)
 
-        # Bottleneck sur la différence
-        x = self.bottleneck(torch.abs(x_t1 - x_t2))
+        # Bottleneck : différence des features les plus profondes
+        x = torch.abs(s4_t1 - s4_t2)
 
         # Décodeur avec différences de features en skip connections
-        x = self.dec4(x, torch.abs(s4_t1 - s4_t2))
-        x = self.dec3(x, torch.abs(s3_t1 - s3_t2))
-        x = self.dec2(x, torch.abs(s2_t1 - s2_t2))
-        x = self.dec1(x, torch.abs(s1_t1 - s1_t2))
+        x = self.dec4(x, torch.abs(s3_t1 - s3_t2))
+        x = self.dec3(x, torch.abs(s2_t1 - s2_t2))
+        x = self.dec2(x, torch.abs(s1_t1 - s1_t2))
+        x = self.dec1(x, torch.abs(s0_t1 - s0_t2))
 
-        return self.head(x)  # logits (B, 1, H, W) — pas de sigmoid ici
+        x = self.up_final(x)
+
+        return self.head(x)  # logits (B, 1, H, W)
