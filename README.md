@@ -1,13 +1,35 @@
 # Urban Change Detection
 
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
+![HF Spaces](https://img.shields.io/badge/Demo-HuggingFace-yellow)
+
 Satellite imagery change detection using a Siamese U-Net with a pretrained ResNet34 encoder. Given two images of the same area taken at different dates, the model produces a pixel-level mask of changed regions.
+
+Built by [Jeremy Maille](https://www.linkedin.com/in/jeremy-maille-3202912a7), AI/ML engineering student.
 
 🚀 **[Try the live demo](https://huggingface.co/spaces/JeremyMaille/urban-change-detection-interface)**
 
+---
+
+## Problem
+
+Given two satellite images of the same location at two different dates, detect pixel-by-pixel what has changed: new buildings, demolitions, urban expansion.
+
+Real-world applications: construction site monitoring, illegal urban expansion detection, post-disaster damage assessment, industrial facility surveillance.
+
+---
+
 ## Demo Usage
 
-![Demo](notebooks/demo_example_1.png)
-![Demo](notebooks/demo_example_2.png)
+<p align="center">
+  <img src="notebooks/demo_example_1.png" width="700" alt="Demo example 1"/>
+</p>
+
+<p align="center">
+  <img src="notebooks/demo_example_2.png" width="700" alt="Demo example 2"/>
+</p>
 
 **1. Prepare two satellite images of the same area at two different dates.**
 Any RGB image works: Google Earth, Sentinel-2, or LEVIR-CD patches. Images are automatically resized to 256x256.
@@ -16,9 +38,9 @@ Any RGB image works: Google Earth, Sentinel-2, or LEVIR-CD patches. Images are a
 
 **3. Click "Detect changes".**
 The model returns three outputs:
-- **T1 (before)** — reference image
-- **T2 (after)** — recent image
-- **Detected changes (red)** — overlay with changed pixels highlighted in red
+- **T1 (before)** - reference image
+- **T2 (after)** - recent image
+- **Detected changes (red)** - overlay with changed pixels highlighted in red
 
 The percentage of pixels detected as changed is displayed below the results.
 
@@ -37,17 +59,15 @@ The percentage of pixels detected as changed is displayed below the results.
 
 Evaluated on scenes entirely unseen during training. Train/val split is performed at the image level to prevent data leakage between patches from the same scene.
 
-![Predictions vs Ground Truth](notebooks/predictions.png)
+> Binary change detection on urban imagery is a notoriously hard task due to severe class imbalance (~4.6% changed pixels) and seasonal variations that must be ignored. Published results on LEVIR-CD range from 0.50 to 0.92 depending on model complexity and compute budget.
 
-![Training curves](notebooks/training_curves.png)
+<p align="center">
+  <img src="notebooks/predictions.png" width="700" alt="Predictions vs Ground Truth"/>
+</p>
 
----
-
-## Problem
-
-Given two satellite images of the same location at two different dates, detect pixel-by-pixel what has changed: new buildings, demolitions, urban expansion.
-
-Real-world applications: construction site monitoring, illegal urban expansion detection, post-disaster damage assessment, industrial facility surveillance.
+<p align="center">
+  <img src="notebooks/training_curves.png" width="700" alt="Training curves"/>
+</p>
 
 ---
 
@@ -130,6 +150,6 @@ Open `notebooks/02_train.ipynb` on Google Colab (Runtime > T4 GPU) and run all c
 
 ## Author
 
-**Jeremy Maille** — AI/ML Engineering Student, CESI Ecole d'Ingenieurs (Bac+5)
+**Jeremy Maille** - AI/ML Engineering Student, CESI Ecole d'Ingenieurs (Bac+5)
 
-[GitHub](https://github.com/JeremyMaille) · Available for freelance projects and apprenticeship contracts (September 2026)
+[GitHub](https://github.com/JeremyMaille) · [LinkedIn](https://www.linkedin.com/in/jeremy-maille-3202912a7)
