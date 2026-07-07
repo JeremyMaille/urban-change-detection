@@ -6,7 +6,7 @@ import torchvision.transforms as T
 import random
 
 
-# Normalisation ImageNet requise par l'encodeur ResNet34 pré-entraîné
+# ImageNet normalization required by the pretrained ResNet34 encoder
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
 
@@ -15,11 +15,11 @@ normalize = T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
 
 class LEVIRPatchDataset(Dataset):
     """
-    Découpe les images LEVIR-CD (1024×1024) en patches 256×256.
+    Splits the LEVIR-CD images (1024x1024) into 256x256 patches.
 
-    La séparation train/val se fait au niveau des images (pas des patches)
-    pour éviter le data leakage  deux patches d'une même image
-    ne peuvent pas se retrouver dans train et val simultanément.
+    The train/val split is done at the image level (not the patch level)
+    to avoid data leakage: two patches from the same image
+    cannot end up in both train and val simultaneously.
     """
 
     def __init__(self, base_dataset, split="train", patch_size=256):
@@ -40,8 +40,8 @@ class LEVIRPatchDataset(Dataset):
         return index
 
     def _augment(self, t1, t2, mask):
-        # Augmentations géométriques uniquement — pas de color jitter
-        # qui casserait la cohérence spectrale entre T1 et T2.
+        # Geometric augmentations only, no color jitter,
+        # which would break the spectral consistency between T1 and T2.
         if random.random() > 0.5:
             t1 = TF.hflip(t1); t2 = TF.hflip(t2); mask = TF.hflip(mask)
         if random.random() > 0.5:
@@ -76,7 +76,7 @@ class LEVIRPatchDataset(Dataset):
         if self.split == "train":
             t1, t2, mask = self._augment(t1, t2, mask)
 
-        # Normalisation ImageNet pour l'encodeur ResNet34 pré-entraîné
+        # ImageNet normalization for the pretrained ResNet34 encoder
         t1 = normalize(t1)
         t2 = normalize(t2)
 
@@ -85,15 +85,15 @@ class LEVIRPatchDataset(Dataset):
 
 def make_dataloaders(root, patch_size=256, batch_size=8, val_ratio=0.1, seed=42):
     """
-    Construit les trois DataLoaders train/val/test.
+    Builds the three train/val/test DataLoaders.
 
-    La séparation train/val se fait au niveau des images source
-    pour éviter le data leakage entre patches d'une même image.
+    The train/val split is done at the source image level
+    to avoid data leakage between patches from the same image.
     """
     full_base  = LEVIRCDPlus(root=root, split="train", download=False)
     test_base  = LEVIRCDPlus(root=root, split="test",  download=False)
 
-    # Split train/val au niveau des images
+    # Train/val split at the image level
     n_images = len(full_base)
     n_val    = max(1, int(n_images * val_ratio))
     n_train  = n_images - n_val
@@ -103,7 +103,7 @@ def make_dataloaders(root, patch_size=256, batch_size=8, val_ratio=0.1, seed=42)
         range(n_images), [n_train, n_val], generator=generator
     )
 
-    # Sous-datasets indexés par image
+    # Sub-datasets indexed by image
     class SubsetBase:
         def __init__(self, base, indices):
             self.base    = base

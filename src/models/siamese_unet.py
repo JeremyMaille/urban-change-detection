@@ -5,8 +5,8 @@ import torchvision.models as models
 
 class DecoderBlock(nn.Module):
     """
-    Upsampling bilinéaire + ConvBlock.
-    Reçoit les features du niveau précédent et la différence de skip connections.
+    Bilinear upsampling + ConvBlock.
+    Receives the features from the previous level and the skip connection difference.
     """
 
     def __init__(self, in_channels, skip_channels, out_channels):
@@ -33,23 +33,23 @@ class DecoderBlock(nn.Module):
 
 class SiameseUNet(nn.Module):
     """
-    Siamese U-Net avec encodeur ResNet34 pré-entraîné ImageNet.
+    Siamese U-Net with an ImageNet-pretrained ResNet34 encoder.
 
-    L'encodeur ResNet34 est partagé entre T1 et T2 (mêmes poids).
-    Les skip connections transmettent la différence absolue de features
-    à chaque niveau, sensibilité au changement à toutes les échelles spatiales.
-    Le Dropout2d dans le décodeur régularise contre le surapprentissage.
+    The ResNet34 encoder is shared between T1 and T2 (same weights).
+    Skip connections carry the absolute feature difference at each level,
+    giving change sensitivity at every spatial scale.
+    Dropout2d in the decoder regularizes against overfitting.
     """
 
     def __init__(self, in_channels=3, pretrained=True):
         super().__init__()
 
-        # Encodeur ResNet34 pré-entraîné
+        # Pretrained ResNet34 encoder
         backbone = models.resnet34(
             weights=models.ResNet34_Weights.IMAGENET1K_V1 if pretrained else None
         )
 
-        # On extrait les blocs de l'encodeur pour accéder aux skip connections
+        # Extract the encoder blocks to access the skip connections
         self.enc0 = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu)  # 64ch, /2
         self.pool = backbone.maxpool                                              # /4
         self.enc1 = backbone.layer1   # 64ch,  /4
@@ -57,16 +57,16 @@ class SiameseUNet(nn.Module):
         self.enc3 = backbone.layer3   # 256ch, /16
         self.enc4 = backbone.layer4   # 512ch, /32
 
-        # Décodeur — channels calés sur les sorties ResNet34
+        # Decoder, channels matched to the ResNet34 outputs
         self.dec4 = DecoderBlock(512, 256, 256)
         self.dec3 = DecoderBlock(256, 128, 128)
         self.dec2 = DecoderBlock(128,  64,  64)
         self.dec1 = DecoderBlock( 64,  64,  32)
 
-        # Remonte à la résolution originale (×2 final)
+        # Upsample back to the original resolution (final x2)
         self.up_final = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
-        # Tête de classification binaire
+        # Binary classification head
         self.head = nn.Conv2d(32, 1, kernel_size=1)
 
     def encode(self, x):
@@ -82,10 +82,10 @@ class SiameseUNet(nn.Module):
         s0_t1, s1_t1, s2_t1, s3_t1, s4_t1 = self.encode(t1)
         s0_t2, s1_t2, s2_t2, s3_t2, s4_t2 = self.encode(t2)
 
-        # Bottleneck : différence des features les plus profondes
+        # Bottleneck: difference of the deepest features
         x = torch.abs(s4_t1 - s4_t2)
 
-        # Décodeur avec différences de features en skip connections
+        # Decoder with feature differences as skip connections
         x = self.dec4(x, torch.abs(s3_t1 - s3_t2))
         x = self.dec3(x, torch.abs(s2_t1 - s2_t2))
         x = self.dec2(x, torch.abs(s1_t1 - s1_t2))

@@ -5,31 +5,31 @@ from sklearn.metrics import f1_score, jaccard_score, precision_score, recall_sco
 
 def change_vector_analysis(t1, t2):
     """
-    Change Vector Analysis (CVA) baseline non-ML classique en télédétection.
+    Change Vector Analysis (CVA), a classic non-ML remote sensing baseline.
 
-    Pour chaque pixel, calcule la magnitude de la différence spectrale entre
-    T1 et T2. Un pixel avec une grande différence est probablement un changement.
+    For each pixel, computes the magnitude of the spectral difference between
+    T1 and T2. A pixel with a large difference is likely a change.
 
     Args:
-        t1   : tensor (B, C, H, W) image avant
-        t2   : tensor (B, C, H, W) image après
+        t1   : tensor (B, C, H, W) before image
+        t2   : tensor (B, C, H, W) after image
     Returns:
-        magnitude : tensor (B, 1, H, W) — score de changement par pixel
+        magnitude : tensor (B, 1, H, W), per-pixel change score
     """
-    diff = t2 - t1                                    # différence pixel par pixel
-    magnitude = torch.norm(diff, dim=1, keepdim=True) # norme L2 sur les canaux
+    diff = t2 - t1                                    # pixel-by-pixel difference
+    magnitude = torch.norm(diff, dim=1, keepdim=True) # L2 norm over channels
     return magnitude
 
 
 def otsu_threshold(magnitude):
     """
-    Seuillage d'Otsu trouve automatiquement le seuil optimal qui sépare
-    les pixels 'changé' des pixels 'stable' en maximisant la variance inter-classe.
+    Otsu thresholding automatically finds the optimal threshold that separates
+    'changed' pixels from 'stable' pixels by maximizing inter-class variance.
 
     Args:
         magnitude : tensor (B, 1, H, W)
     Returns:
-        binary_mask : tensor (B, 1, H, W) — 0 ou 1
+        binary_mask : tensor (B, 1, H, W), 0 or 1
     """
     mag_np = magnitude.squeeze(1).cpu().numpy()  # (B, H, W)
     masks  = []
@@ -37,7 +37,7 @@ def otsu_threshold(magnitude):
     for b in range(mag_np.shape[0]):
         flat = mag_np[b].flatten()
 
-        # Calcul du seuil d'Otsu manuellement sur l'histogramme
+        # Manually compute the Otsu threshold from the histogram
         counts, bin_edges = np.histogram(flat, bins=256)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
         total = counts.sum()
@@ -66,13 +66,13 @@ def otsu_threshold(magnitude):
 
 def compute_metrics(pred, target):
     """
-    Calcule F1, IoU, précision et rappel sur la classe 'changé'.
+    Computes F1, IoU, precision and recall on the 'changed' class.
 
     Args:
-        pred   : tensor (B, 1, H, W) — prédictions binaires
-        target : tensor (B, 1, H, W) — masques ground truth
+        pred   : tensor (B, 1, H, W), binary predictions
+        target : tensor (B, 1, H, W), ground truth masks
     Returns:
-        dict de métriques
+        dict of metrics
     """
     p = pred.cpu().numpy().flatten().astype(int)
     t = target.cpu().numpy().flatten().astype(int)

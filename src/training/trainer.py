@@ -4,9 +4,9 @@ import torch.nn as nn
 
 class DiceLoss(nn.Module):
     """
-    Dice Loss mesure le chevauchement entre prédiction et ground truth.
-    Naturellement robuste au déséquilibre de classe car elle ne calcule
-    que sur les pixels positifs (changés).
+    Dice Loss measures the overlap between prediction and ground truth.
+    Naturally robust to class imbalance since it only computes
+    over positive (changed) pixels.
     """
 
     def __init__(self, smooth=1.0):
@@ -25,9 +25,9 @@ class DiceLoss(nn.Module):
 
 class CombinedLoss(nn.Module):
     """
-    BCE pondérée + Dice Loss.
-    Le pos_weight compense le déséquilibre ~95/5 en pénalisant davantage
-    les faux négatifs (pixels changés manqués).
+    Weighted BCE + Dice Loss.
+    pos_weight compensates for the ~95/5 imbalance by penalizing
+    false negatives (missed changed pixels) more heavily.
     """
 
     def __init__(self, pos_weight=10.0, dice_weight=1.0, bce_weight=1.0):
@@ -40,7 +40,7 @@ class CombinedLoss(nn.Module):
         self.bce_w     = bce_weight
 
     def forward(self, logits, targets):
-        # Déplace pos_weight sur le bon device dynamiquement
+        # Dynamically move pos_weight to the right device
         self.bce.pos_weight = self.bce.pos_weight.to(logits.device)
         bce_loss  = self.bce(logits, targets)
         dice_loss = self.dice(logits, targets)

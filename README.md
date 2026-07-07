@@ -31,7 +31,7 @@ Applications concrètes : suivi de chantiers, détection d'expansion urbaine ill
 
 ## Dataset
 
-**LEVIR-CD+** — dataset de référence en change detection (2021)
+**LEVIR-CD+** : dataset de référence en change detection (2021)
 
 - 985 paires d'images bi-temporelles, résolution 0.5 m/pixel
 - Images 1024×1024 px découpées en patches 256×256 pour l'entraînement
