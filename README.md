@@ -1,67 +1,89 @@
 # Urban Change Detection
 
-Détection de changement urbain par imagerie satellite à l'aide d'un réseau siamois U-Net avec encodeur ResNet34 pré-entraîné. Le modèle compare deux images de la même zone géographique prises à des dates différentes et produit un masque pixel par pixel des zones ayant changé.
+Satellite imagery change detection using a Siamese U-Net with a pretrained ResNet34 encoder. Given two images of the same area taken at different dates, the model produces a pixel-level mask of changed regions.
 
-![Prédictions vs Ground Truth](notebooks/predictions.png)
+🚀 **[Try the live demo](https://huggingface.co/spaces/JeremyMaille/urban-change-detection-interface)**
+
+## Demo Usage
+
+![Demo](notebooks/demo_example_1.png)
+![Demo](notebooks/demo_example_2.png)
+
+**1. Prepare two satellite images of the same area at two different dates.**
+Any RGB image works: Google Earth, Sentinel-2, or LEVIR-CD patches. Images are automatically resized to 256x256.
+
+**2. Upload the "before" image (T1) on the left panel and the "after" image (T2) on the right panel.**
+
+**3. Click "Detect changes".**
+The model returns three outputs:
+- **T1 (before)** — reference image
+- **T2 (after)** — recent image
+- **Detected changes (red)** — overlay with changed pixels highlighted in red
+
+The percentage of pixels detected as changed is displayed below the results.
+
+> **Note:** the model was trained on 0.5 m/pixel imagery. Results are best on high-resolution images of urban areas.
 
 ---
 
-## Résultats
+## Results
 
-| Modèle | F1 | IoU | Précision | Rappel |
-|--------|-----|-----|-----------|--------|
-| Baseline CVA (non-ML) | 0.095 | 0.050 | 0.054 | 0.421 |
+| Model | F1 | IoU | Precision | Recall |
+|-------|----|-----|-----------|--------|
+| CVA Baseline (non-ML) | 0.095 | 0.050 | 0.054 | 0.421 |
 | **Siamese U-Net + ResNet34** | **0.536** | **0.450** | **0.532** | **0.607** |
 
-**+464% de F1 par rapport à la baseline non-ML.**
+**+464% F1 over the non-ML baseline.**
 
-Évaluation honnête sur scènes entièrement inédites (test set). La séparation train/val est faite au niveau des images source pour éviter tout data leakage entre patches d'une même scène.
+Evaluated on scenes entirely unseen during training. Train/val split is performed at the image level to prevent data leakage between patches from the same scene.
 
-![Courbes d'entraînement](notebooks/training_curves.png)
+![Predictions vs Ground Truth](notebooks/predictions.png)
+
+![Training curves](notebooks/training_curves.png)
 
 ---
 
-## Problème
+## Problem
 
-Étant donné deux images satellite de la même zone à deux dates différentes, détecter pixel par pixel ce qui a changé (nouvelles constructions, démolitions, expansion urbaine).
+Given two satellite images of the same location at two different dates, detect pixel-by-pixel what has changed: new buildings, demolitions, urban expansion.
 
-Applications concrètes : suivi de chantiers, détection d'expansion urbaine illégale, évaluation de dégâts post-catastrophe, surveillance d'installations industrielles.
+Real-world applications: construction site monitoring, illegal urban expansion detection, post-disaster damage assessment, industrial facility surveillance.
 
 ---
 
 ## Dataset
 
-**LEVIR-CD+** : dataset de référence en change detection (2021)
+**LEVIR-CD+** (2021)
 
-- 985 paires d'images bi-temporelles, résolution 0.5 m/pixel
-- Images 1024×1024 px découpées en patches 256×256 pour l'entraînement
-- Annotation : masque binaire change / no-change centré sur les bâtiments
-- Déséquilibre de classe sévère : ~4.6% de pixels "changé"
-- Séparation train/val au niveau des images (pas des patches) pour éviter le data leakage
+- 985 bi-temporal image pairs at 0.5 m/pixel resolution
+- 1024x1024 px images cropped into 256x256 patches for training
+- Binary annotation: change / no-change focused on buildings
+- Severe class imbalance: ~4.6% changed pixels
+- Train/val split at image level to prevent patch-level data leakage
 
 ---
 
 ## Architecture
 
-**Siamese U-Net avec encodeur ResNet34 pré-entraîné ImageNet**
+**Siamese U-Net with pretrained ResNet34 encoder**
 
 ```
-T1 ──→ [ ResNet34 Encoder ] ──→ features_T1 ──→ |diff| ──→ [ Decoder ] ──→ masque
-                                                              ↑
-T2 ──→ [ ResNet34 Encoder ] ──→ features_T2 ──→ |diff| ──┘
-        (poids partagés)
+T1 --> [ ResNet34 Encoder ] --> features_T1 --> |diff| --> [ Decoder ] --> mask
+                                                             ^
+T2 --> [ ResNet34 Encoder ] --> features_T2 --> |diff| --+
+       (shared weights)
 ```
 
-L'encodeur est partagé entre les deux dates, T1 et T2 sont projetés dans le même espace de features, rendant leur différence sémantiquement comparable. Les skip connections transmettent la différence absolue de features à chaque niveau spatial, ce qui rend le décodeur sensible au changement à toutes les échelles.
+The encoder is shared between both dates. T1 and T2 are projected into the same feature space, making their difference semantically meaningful. Skip connections carry the absolute feature difference at each spatial level, making the decoder sensitive to change at all scales.
 
-**Choix techniques clés :**
+**Key design choices:**
 
-- Encodeur ResNet34 pré-entraîné ImageNet avec learning rate différencié (lr/10) pour préserver les features pré-apprises
-- Loss combinée BCE pondérée (pos_weight=10) + Dice pour gérer le déséquilibre 95/5
-- Dropout2d=0.2 dans le décodeur pour la régularisation
-- Normalisation ImageNet appliquée aux deux dates
-- Early stopping sur le val F1 (patience=10)
-- Paramètres : 23.8M
+- Pretrained ResNet34 encoder with differentiated learning rate (lr/10) to preserve ImageNet features
+- Combined loss: weighted BCE (pos_weight=10) + Dice to handle the 95/5 class imbalance
+- Dropout2d=0.2 in the decoder for regularization
+- ImageNet normalization applied to both dates
+- Early stopping on val F1 (patience=10)
+- Parameters: 23.8M
 
 ---
 
@@ -81,32 +103,33 @@ Python 3.11
 urban-change-detection/
 ├── src/
 │   ├── datasets/       # LEVIRPatchDataset, make_dataloaders
-│   ├── models/         # SiameseUNet (ResNet34), baseline CVA
+│   ├── models/         # SiameseUNet (ResNet34), CVA baseline
 │   ├── training/       # CombinedLoss, train_one_epoch, evaluate
-│   └── serving/        # (à venir)
+│   └── serving/
 ├── notebooks/
-│   ├── 01_eda.ipynb    # Exploration LEVIR-CD+
-│   └── 02_train.ipynb  # Entraînement Colab 
-├── configs/
+│   ├── 01_eda.ipynb    # LEVIR-CD+ exploration
+│   └── 02_train.ipynb  # Colab training notebook (Run All)
+├── demo/
+│   └── app.py          # Gradio interface
 └── requirements.txt
 ```
 
 ---
 
-## Reproduire les résultats
+## Reproduce
 
-**Prérequis :** compte Google avec accès Colab et ~5 GB de stockage Drive.
+**Requirements:** Google account with Colab access and ~5 GB Drive storage.
 
 ```bash
 git clone https://github.com/JeremyMaille/urban-change-detection.git
 ```
 
-Ouvrir `notebooks/02_train.ipynb` sur Google Colab (Runtime → T4 GPU) et exécuter toutes les cellules. Le notebook clone le repo, télécharge LEVIR-CD+ et lance l'entraînement automatiquement.
+Open `notebooks/02_train.ipynb` on Google Colab (Runtime > T4 GPU) and run all cells. The notebook clones the repo, downloads LEVIR-CD+ and starts training automatically.
 
 ---
 
-## Auteur
+## Author
 
-**Jérémy Maille** Étudiant ingénieur IA/ML, CESI École d'Ingénieurs (Bac+5)
+**Jeremy Maille** — AI/ML Engineering Student, CESI Ecole d'Ingenieurs (Bac+5)
 
-[GitHub](https://github.com/JeremyMaille) 
+[GitHub](https://github.com/JeremyMaille) · Available for freelance projects and apprenticeship contracts (September 2026)
