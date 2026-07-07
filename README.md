@@ -2,7 +2,7 @@
 
 Détection de changement urbain par imagerie satellite à l'aide d'un réseau siamois U-Net avec encodeur ResNet34 pré-entraîné. Le modèle compare deux images de la même zone géographique prises à des dates différentes et produit un masque pixel par pixel des zones ayant changé.
 
-![Prédictions vs Ground Truth](notebooks\predictions.png)
+![Prédictions vs Ground Truth](notebooks/predictions.png)
 
 ---
 
@@ -17,13 +17,13 @@ Détection de changement urbain par imagerie satellite à l'aide d'un réseau si
 
 Évaluation honnête sur scènes entièrement inédites (test set). La séparation train/val est faite au niveau des images source pour éviter tout data leakage entre patches d'une même scène.
 
-![Courbes d'entraînement](notebooks\training_curves.png)
+![Courbes d'entraînement](notebooks/training_curves.png)
 
 ---
 
 ## Problème
 
-Étant donné deux images satellite de la même zone à deux dates différentes, détecter pixel par pixel ce qui a changé — nouvelles constructions, démolitions, expansion urbaine.
+Étant donné deux images satellite de la même zone à deux dates différentes, détecter pixel par pixel ce qui a changé (nouvelles constructions, démolitions, expansion urbaine).
 
 Applications concrètes : suivi de chantiers, détection d'expansion urbaine illégale, évaluation de dégâts post-catastrophe, surveillance d'installations industrielles.
 
@@ -52,7 +52,7 @@ T2 ──→ [ ResNet34 Encoder ] ──→ features_T2 ──→ |diff| ──�
         (poids partagés)
 ```
 
-L'encodeur est partagé entre les deux dates — T1 et T2 sont projetés dans le même espace de features, rendant leur différence sémantiquement comparable. Les skip connections transmettent la différence absolue de features à chaque niveau spatial, ce qui rend le décodeur sensible au changement à toutes les échelles.
+L'encodeur est partagé entre les deux dates, T1 et T2 sont projetés dans le même espace de features, rendant leur différence sémantiquement comparable. Les skip connections transmettent la différence absolue de features à chaque niveau spatial, ce qui rend le décodeur sensible au changement à toutes les échelles.
 
 **Choix techniques clés :**
 
@@ -86,7 +86,7 @@ urban-change-detection/
 │   └── serving/        # (à venir)
 ├── notebooks/
 │   ├── 01_eda.ipynb    # Exploration LEVIR-CD+
-│   └── 02_train.ipynb  # Entraînement Colab (Run All)
+│   └── 02_train.ipynb  # Entraînement Colab 
 ├── configs/
 └── requirements.txt
 ```
@@ -107,6 +107,6 @@ Ouvrir `notebooks/02_train.ipynb` sur Google Colab (Runtime → T4 GPU) et exéc
 
 ## Auteur
 
-**Jérémy Maille** — Étudiant ingénieur IA/ML, CESI École d'Ingénieurs (Bac+5)
+**Jérémy Maille** Étudiant ingénieur IA/ML, CESI École d'Ingénieurs (Bac+5)
 
 [GitHub](https://github.com/JeremyMaille) 
