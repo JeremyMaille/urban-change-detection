@@ -13,3 +13,4 @@ pillow>=10.0.0
 python-dotenv>=1.0.0
 torchgeo>=0.5.0
 gdown>=5.1.0
+pytest
