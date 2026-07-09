@@ -125,4 +125,4 @@ with gr.Blocks(title="Urban Change Detection") as demo:
     **Jérémy Maille** · [GitHub](https://github.com/JeremyMaille/urban-change-detection)
     """)
 
-demo.launch()
+demo.launch(server_name="0.0.0.0", server_port=7860)
