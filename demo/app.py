@@ -7,6 +7,12 @@ import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 from models.siamese_unet import SiameseUNet
+from serving.monitoring import InferenceLogger, check_drift, image_stats, load_reference
+
+# --- Monitoring setup ---
+logger = InferenceLogger(os.path.join(os.path.dirname(__file__), 'inference_log.jsonl'))
+REFERENCE = load_reference(os.path.join(os.path.dirname(__file__), '..', 'src', 'serving', 'reference_stats.json'))
+import time as _time
 
 # ImageNet normalization required by the ResNet34 encoder
 normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -46,6 +52,7 @@ def pad_to_tile_grid(img: Image.Image) -> tuple[Image.Image, int, int]:
 
 
 def predict(img_t1: Image.Image, img_t2: Image.Image):
+    t_start = _time.perf_counter()
     img_t1 = img_t1.convert('RGB')
     img_t2 = img_t2.convert('RGB')
 
@@ -85,10 +92,33 @@ def predict(img_t1: Image.Image, img_t2: Image.Image):
     overlay = t2_display.copy()
     overlay[full_mask == 1] = [220, 30, 30]
 
+    # --- Monitoring: log the inference and check input drift ---
+    latency = _time.perf_counter() - t_start
+    stats_t1 = image_stats(arr_t1[:orig_h, :orig_w])
+    stats_t2 = image_stats(t2_display)
+    change_ratio = float(full_mask.mean())
+
+    warning = ""
+    if REFERENCE is not None:
+        drift = check_drift(stats_t1, REFERENCE)
+        drift_t2 = check_drift(stats_t2, REFERENCE)
+        if drift_t2.drifted:
+            drift.drifted = True
+            drift.reasons += [f"T2 {r}" for r in drift_t2.reasons]
+        logger.log(latency, stats_t1, stats_t2, change_ratio, drift)
+        if drift.drifted:
+            warning = (
+                "⚠️ **Input drift detected.** These images differ statistically from the "
+                "LEVIR-CD+ training distribution (satellite RGB, ~0.5 m/px). "
+                "The prediction may be unreliable.\n\n"
+                + "\n".join(f"- {r}" for r in drift.reasons)
+            )
+
     return (
         Image.fromarray(arr_t1[:orig_h, :orig_w]),
         Image.fromarray(t2_display),
-        Image.fromarray(overlay)
+        Image.fromarray(overlay),
+        warning
     )
 
 
@@ -114,10 +144,12 @@ with gr.Blocks(title="Urban Change Detection") as demo:
         out_t2      = gr.Image(label="T2 (after)")
         out_overlay = gr.Image(label="Detected changes (red)")
 
+    drift_warning = gr.Markdown()
+
     btn.click(
         fn      = predict,
         inputs  = [img_t1, img_t2],
-        outputs = [out_t1, out_t2, out_overlay]
+        outputs = [out_t1, out_t2, out_overlay, drift_warning]
     )
 
     gr.Markdown("""
